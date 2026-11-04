@@ -22,6 +22,16 @@ PII_PATTERNS = [
     (re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I), "[REDACTED_EMAIL]"),
     (re.compile(r"\b(?:\+?\d{1,3}[-.\s]?)?(?:\d{10})\b"), "[REDACTED_PHONE]"),
 ]
+EVIDENCE_ACCESS = {
+    "Administrator",
+    "Knowledge Base Manager",
+    "Support Agent",
+}
+
+DIAGNOSTICS_ACCESS = {
+    "Administrator",
+    "Knowledge Base Manager",
+}
 @dataclass(frozen=True)
 class UserContext:
     user_id: str

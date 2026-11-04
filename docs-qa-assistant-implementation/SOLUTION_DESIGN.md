@@ -4,7 +4,7 @@
 **Stakeholder:** Elena Torres, Head of Support  
 **Case:** Forward Deployed Engineer — Case Study 5  
 **Status:** Updated solution design proposal  
-**Primary stack:** Python, FastAPI, Next.js, Groq, retrieval-augmented question answering  
+**Primary stack:** Python, FastAPI, Next.js, Sentence Transformers, ChromaDB, BM25, Groq, hybrid RAG  
 **Deployment:** Vercel frontend, Render backend
 
 ---
@@ -19,7 +19,7 @@ The solution is designed around three enterprise concerns:
 2. **Access control:** Users must retrieve only documents and passages permitted by their role and access scope.
 3. **Answer reliability:** The assistant must ground answers in retrieved evidence, cite its sources and abstain when evidence is missing or insufficient.
 
-The system uses a retrieval-first architecture. A deterministic retrieval and evidence-validation layer decides whether there is enough relevant evidence before Groq is called for answer generation. Groq is not the source of truth; the approved documentation is.
+The system uses a hybrid retrieval-first architecture. BM25 keyword search and Sentence Transformers vector search independently retrieve relevant chunks; Reciprocal Rank Fusion combines their rankings. An evidence-validation layer decides whether there is enough relevant evidence before Groq is called for answer generation. Groq is not the source of truth; the approved documentation is.
 
 The supplied seed contains six documentation articles and five example questions. The initial acceptance target is to answer the four supported questions from the correct documentation and explicitly abstain on the unsupported Salesforce-integration question.
 
@@ -585,3 +585,30 @@ The v1 solution is successful when:
 - The deployed application and README provide clear instructions for evaluation.
 
 The central design principle is: **retrieve only what the user is allowed to see, answer only what the evidence supports, and abstain when the system cannot verify an answer.**
+
+
+## V2 implementation update — Hybrid RAG architecture
+
+### Retrieval strategy
+V2 implements hybrid retrieval rather than lexical-only retrieval. Every document is split into overlapping chunks with stable identifiers (`DOC-ID-C001`). Each chunk is embedded using Sentence Transformers (`sentence-transformers/all-MiniLM-L6-v2`) and persisted in ChromaDB using cosine distance. In parallel, the same chunks are indexed with BM25 (`rank-bm25`) for exact lexical matching.
+
+At query time, access metadata is applied to both retrieval channels. BM25 ranks authorized chunks using token overlap and term weighting. ChromaDB performs semantic nearest-neighbor search over the authorized subset. Reciprocal Rank Fusion combines the two ranked lists:
+
+`RRF(chunk) = Σ 1 / (k + rank_in_channel)`
+
+The resulting hybrid score is a ranking score, not a calibrated probability. The UI exposes chunk ID, BM25 score/rank, cosine similarity/vector rank, RRF score and final rank so the reviewer can inspect retrieval behavior.
+
+### Persistent vector store
+ChromaDB is the vector database for this proof of concept. Its persistent collection stores chunk embeddings and metadata including document ID, title, chunk index, classification and role-access flags. A content hash is stored to detect changed source chunks and trigger re-indexing. The local Chroma directory is generated at runtime and is not committed to Git.
+
+### Embedding model and LLM separation
+Sentence Transformers creates embeddings for documents and incoming questions. Groq is used only for answer generation. Groq is not the embedding model and is not the vector database. The embedding model is configured independently from the Groq chat model.
+
+### Hybrid evidence and abstention
+The retrieval layer returns the top hybrid-ranked authorized chunks with separate lexical, semantic and fused scores. A configurable evidence gate checks lexical overlap or semantic similarity before generation. These thresholds are starting values and must be tuned against labelled supported and unsupported questions; neither score should be presented as a probability. Groq receives only authorized chunks, and its returned chunk IDs are checked against the retrieved chunk IDs. If Groq fails, the application returns the complete best authorized chunk as an extractive fallback.
+
+### V1/V2 versioning
+V1 is the lexical BM25 baseline and should be committed/tagged as `v1-lexical-retrieval` before replacing the working tree. V2 is this hybrid implementation and should be committed separately as `v2-hybrid-rag`. The comparison should measure retrieval quality and abstention behavior on the same labelled questions, rather than claiming hybrid is better without evaluation.
+
+### Operational notes
+The first V2 startup downloads the Sentence Transformers model and creates the ChromaDB collection. Later starts reuse the cached model and persistent collection. For Render, mount a persistent disk at the configured Chroma directory; otherwise deployments may lose the local vector index. The current conversation memory and demo identity mechanism remain proof-of-concept only.

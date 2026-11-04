@@ -13,3 +13,7 @@ dist/
 build/
 .DS_Store
 Thumbs.db
+
+backend/chroma_db/
+backend/.chroma/
+*.sqlite3

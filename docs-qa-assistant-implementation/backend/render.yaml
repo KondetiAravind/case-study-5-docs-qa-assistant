@@ -12,5 +12,11 @@ services:
         sync: false
       - key: GROQ_MODEL
         value: llama-3.3-70b-versatile
+      - key: EMBEDDING_MODEL
+        value: sentence-transformers/all-MiniLM-L6-v2
+      - key: CHROMA_PERSIST_DIR
+        value: /var/data/chroma
+      - key: CHROMA_COLLECTION
+        value: solstice_docs_v2
       - key: CORS_ORIGINS
         sync: false
