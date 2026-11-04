@@ -14,7 +14,7 @@ from app.security import (
     EVIDENCE_ACCESS,
     DIAGNOSTICS_ACCESS,
 )
-from app.services.retrieval import load_documents, HybridRetriever, HashTestEncoder, SentenceTransformerEncoder
+from app.services.retrieval import load_documents, HybridRetriever
 from app.services.answering import generate_answer
 
 logging.basicConfig(level=logging.INFO)
@@ -23,19 +23,16 @@ DATA_PATH = BACKEND_DIR / "app" / "data" / "docs.json"
 
 def build_retriever():
     docs = load_documents(DATA_PATH)
-    # Never index documents containing detected high-risk credential patterns.
-    safe_docs = [d for d in docs if not contains_high_risk_secret(d["content"])]
-    if APP_ENV == "test":
-        encoder = HashTestEncoder()
-        retriever = HybridRetriever(
-            safe_docs, encoder=encoder,
-            persist_dir=Path(tempfile.mkdtemp(prefix="docsqa-chroma-test-")),
-            collection_name="docsqa_test_" + uuid.uuid4().hex[:10],
-            rebuild=True
-        )
-    else:
-        encoder = SentenceTransformerEncoder()
-        retriever = HybridRetriever(safe_docs, encoder=encoder)
+
+    # Exclude documents containing detected high-risk secrets.
+    safe_docs = [
+        d for d in docs
+        if not contains_high_risk_secret(d["content"])
+    ]
+
+    # Lightweight BM25-only retrieval.
+    retriever = HybridRetriever(safe_docs)
+
     return docs, retriever
 
 DOCS, RETRIEVER = build_retriever()
